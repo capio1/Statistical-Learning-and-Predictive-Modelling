@@ -1,0 +1,180 @@
+---
+title: "Wh15"
+author: "Rosebella Capio"
+date: "10/24/2018"
+output: html_document
+---
+
+
+
+
+```{r}
+
+library(corrplot)
+library(plotly)
+library(mclust)
+library(NbClust)
+library(tidyverse)
+library(factoextra)
+library(cluster)
+library(NbClust)
+library(fpc)
+library(dendroextras)
+library(dendextend)
+library(mclust)
+library(dbscan)
+library(dplyr)
+library(maps)
+library(ggplot2)
+library(ggthemes)
+library(reshape2)
+library(stringr)
+library(FactoMineR)
+require(magrittr)
+library(mclust)
+
+wh15=read.csv("/Users/capio/Dropbox/SCHOOL/FALL 2018/STAT 517/Stat517-master/Data/World_Happiness_2015.csv")
+wh15.=wh15[,c(1:2,6:12)]
+#data preparation
+is.na(wh15)
+new.wh15=wh15[,6:12]#doesn't have happiness score
+with.wh15=wh15[,4:12] #has happiness score included
+country=wh15$Country
+region=wh15$Region
+country.wh15=cbind(country,with.wh15) # has country included
+
+#Scaling the data
+wh15.scaled <- scale(wh15[, 3:12])
+summary(wh15.scaled)
+
+#original.scaled=scale(country.wh15)
+
+#Heat Map of Correlation Matrix
+qplot(x=Var1, y=Var2, data=melt(cor(wh15.scaled, use="p")), fill=value, geom="tile") +
+  scale_fill_gradient2(limits=c(-1, 1)) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+  labs(title="Heatmap of Correlation Matrix", 
+       x=NULL, y=NULL)
+
+
+# 1. PCA
+wh15.scaled.pca <- PCA(wh15.scaled, graph=FALSE)
+print(wh15.scaled.pca)
+
+eigenvalues <- wh15.scaled.pca$eig
+head(eigenvalues)
+#The proportion of variation retained by the principal components was extracted above.
+#eigenvalues is the amount of variation retained by each PC. The first PC corresponds to the #maximum amount of variation in the data set. In this case, the first two principal #components are worthy of consideration because A 
+
+fviz_screeplot(wh15.scaled.pca, addlabels = TRUE, ylim = c(0, 65))
+#The scree plot shows us which components explain most of the variability in the data. In #this case, almost 80% of the variances contained in the data are retained by the first two #principal components.
+
+head(wh15.scaled.pca$var$contrib)
+#Variables that are correlated with PC1 and PC2 are the most important in explaining the variability in the data set.
+#The contribution of variables was extracted above: The larger the value of the #contribution, the more the variable contributes to the component.
+
+fviz_pca_var(wh15.scaled.pca, col.var="contrib",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE  )
+#This highlights the most important variables in explaining the variations retained by the #principal components.
+
+#Using Pam Clustering Analysis to group countries
+#finding the best number of k
+number <- NbClust(wh15.scaled,distance="euclidean",
+                  min.nc=2, max.nc=15, method='ward.D', index='all', alphaBeale = 0.1)
+
+#according to majority grouping, the best number of k=3
+
+#therefore using k=3
+set.seed(44)
+pam <- pam(wh15.scaled, diss=FALSE, 3, keep.data=TRUE)
+fviz_silhouette(pam)
+
+#Number of countries in each cluster
+wh15$Country[pam$id.med]
+
+#This prints out one typical country represents each cluster.
+fviz_cluster(pam, stand = FALSE, geom = "point",
+             ellipse.type = "norm")
+
+#world map of the clusters
+#wh15['cluster'] <- as.factor(pam$clustering)
+#map <- map_data("world")
+#map <- left_join(map, hpi, by = c('region' = 'country'))
+#ggplot() + geom_polygon(data = map, aes(x = long, y = lat, group = group, fill=cluster, #color=cluster)) +
+ # labs(title = "Clustering Happy Planet Index", subtitle = "Based on data #from:http://happyplanetindex.org/", x=NULL, y=NULL) + theme_minimal()
+
+
+
+#2. KMEANS CLUSTERING
+km <- kmeans(wh15[, 4:10],3, iter.max=100)
+
+#getting vectors of happiness score from the kmeans
+#g1 <- wh15[km$cluster == 1,]$Happiness.Score
+#g2 <- wh15[km$cluster == 2,]$Happiness.Score
+#g3 <- wh15[km$cluster == 3,]$Happiness.Score
+
+g1 <- country.wh15[km$cluster == 1,]$Happiness.Score
+g2 <- country.wh15[km$cluster == 2,]$Happiness.Score
+g3 <- country.wh15[km$cluster == 3,]$Happiness.Score
+
+
+#histogram showing the distribution of the clusters
+hist(g1, xlim=c(0,10), col=rgb(1,0,0,0.5), breaks=seq(0.25,10,0.25)  
+     , main = "Histogram of Happiness Score for 3 cluster-groups"
+     , xlab = "Country Happiness Score")
+hist(g2, xlim=c(0,10), col=rgb(0,1,0,0.5), breaks=seq(0.25,10,0.25), add=T)
+hist(g3, xlim=c(0,10), col=rgb(0,0,1,0.5), breaks=seq(0.25,10,0.25), add=T)
+legend("topright", c("Group1", "Group2", "Group3")
+       , fill=c(rgb(1,0,0,0.5),rgb(0,1,0,0.5),rgb(0,0,1,0.5)) )
+
+#countries with top happiness rank
+top <- which.max(c(mean(g1),mean(g2), mean(g3))) # which is the top group
+happiest <- country.wh15[km$cluster == top, 1:2]
+print(happiest[order(happiest$Happiness.Score, decreasing=TRUE), ], row.names = FALSE)
+
+
+#3. HIERARCHIAL CLUSTERING 
+
+# Dissimilarity matrix
+d <- dist(wh15.scaled, method = "euclidean")
+
+# Hierarchical clustering using Complete Linkage
+hc1 <- hclust(d, method = "complete" )
+
+# Plot the obtained dendrogram
+plot(hc1, cex = 0.6, hang = -1)
+
+# Ward's method
+hc5 <- hclust(d, method = "ward.D2" )
+
+# Cut tree into 3 groups
+sub_grp <- cutree(hc5, k = 3)
+
+# Number of members in each cluster
+table(sub_grp)
+
+#add the cluster each observation belongs to to our original data.
+wh15 %>%
+  mutate(cluster = sub_grp) %>% head
+
+#It’s also possible to draw the dendrogram with a border around the 3 clusters. The #argument border is used to specify the border colors for the rectangles:
+
+plot(hc5, cex = 0.6)
+rect.hclust(hc5, k = 3, border = 2:5)
+
+fviz_cluster(list(data = wh15.scaled, cluster = sub_grp))
+
+#removing the indexes
+print(country.wh15, row.names = FALSE)
+
+#4. MODEL BASED CLUSTERING
+#the first 4 PCAs explain 81% of the total variation
+par(mfrow=c(1,3))
+mt.fit<-Mclust(wh15.scaled[,4:10])
+summary(mt.fit); mt.fit$modelName ; mt.fit$G
+fviz_mclust(mt.fit,"BIC",palette="jco")
+
+
+```
+
